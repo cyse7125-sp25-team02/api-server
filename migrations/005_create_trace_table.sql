@@ -1,9 +1,9 @@
 -- migrations/003_create_trace_table.sql
-CREATE TABLE webapp.traces (
+CREATE TABLE api.traces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES webapp.users(id),
-    instructor_id UUID REFERENCES webapp.instructors(id),
-    course_id UUID REFERENCES webapp.courses(id),
+    user_id UUID REFERENCES api.users(id),
+    instructor_id UUID REFERENCES api.instructors(id),
+    course_id UUID REFERENCES api.courses(id),
     status VARCHAR(10) NOT NULL CHECK (status IN ('failed', 'processed', 'uploaded')),
     vector_id VARCHAR(100),
     file_name VARCHAR(255) NOT NULL,

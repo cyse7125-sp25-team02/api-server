@@ -76,7 +76,7 @@ func CreateUser(db *sql.DB, req CreateUserRequest) (*User, error) {
 
 	var user User
 	query := `
-        INSERT INTO webapp.users (first_name, last_name, username, password, role, email)
+        INSERT INTO api.users (first_name, last_name, username, password, role, email)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, first_name, last_name, username, role, email, account_created, account_updated
     `
@@ -113,7 +113,7 @@ func AuthenticateUser(db *sql.DB, username, password string) (*User, error) {
 
 	query := `
         SELECT id, first_name, last_name, username, password, role, email, account_created, account_updated 
-        FROM webapp.users 
+        FROM api.users 
         WHERE username = $1
     `
 
@@ -154,7 +154,7 @@ func UpdateUser(db *sql.DB, userID uuid.UUID, req UpdateUserRequest) (*User, err
 	defer tx.Rollback()
 
 	// Build the update query dynamically based on which fields are provided
-	query := "UPDATE webapp.users SET"
+	query := "UPDATE api.users SET"
 	args := []interface{}{userID}
 	argIndex := 2 // Start at 2 because userID is $1
 
@@ -233,7 +233,7 @@ func GetUserByID(db *sql.DB, userID uuid.UUID) (*User, error) {
 
 	query := `
         SELECT id, first_name, last_name, username, role, email, account_created, account_updated 
-        FROM webapp.users 
+        FROM api.users 
         WHERE id = $1
     `
 
