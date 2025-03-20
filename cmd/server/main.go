@@ -21,6 +21,10 @@ func main() {
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
+	// create /healthz endpoint to check if the server is running
+	healthHandler := handler.NewHealthHandler(db)
+	mux.Handle("/healthz", healthHandler)
+
 	userHandler := handler.NewUserHandler(db)
 	mux.Handle("/v1/user", userHandler)
 
