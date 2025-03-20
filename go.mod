@@ -1,6 +1,6 @@
 module api-server
 
-go 1.24.1
+go 1.23.4
 
 require (
 	cloud.google.com/go/storage v1.51.0
