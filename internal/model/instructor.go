@@ -51,7 +51,7 @@ func (r *CreateInstructorRequest) Validate() error {
 func CreateInstructor(db *sql.DB, req CreateInstructorRequest, userID uuid.UUID) (*Instructor, error) {
 	var instructor Instructor
 	query := `
-	INSERT INTO webapp.instructors (user_id, name, email)
+	INSERT INTO api.instructors (user_id, name, email)
 	VALUES ($1, $2, $3)
 	RETURNING id, user_id, name, email, date_added, date_updated
 	`
@@ -82,7 +82,7 @@ func GetInstructorByID(db *sql.DB, instructorID uuid.UUID) (*Instructor, error) 
 
 	query := `
 	SELECT id, user_id, name, email, date_added, date_updated
-	FROM webapp.instructors
+	FROM api.instructors
 	WHERE id = $1
 	`
 
@@ -104,7 +104,7 @@ func GetInstructorByID(db *sql.DB, instructorID uuid.UUID) (*Instructor, error) 
 
 func DeleteInstructorByID(db *sql.DB, instructorID uuid.UUID) error {
 	query := `
-	DELETE FROM webapp.instructors
+	DELETE FROM api.instructors
 	WHERE id = $1
 	`
 
@@ -134,7 +134,7 @@ func UpdateInstructor(db *sql.DB, instructorID uuid.UUID, req UpdateInstructorRe
 	defer tx.Rollback()
 
 	// Build the update query dynamically based on which fields are provided
-	query := "UPDATE webapp.instructors SET"
+	query := "UPDATE api.instructors SET"
 	args := []interface{}{instructorID}
 	argIndex := 2 // Start at 2 because instructorID is $1
 

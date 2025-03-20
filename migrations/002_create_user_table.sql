@@ -1,7 +1,7 @@
 -- migrations/002_create_user_table.sql
-CREATE SCHEMA IF NOT EXISTS webapp;
+CREATE SCHEMA IF NOT EXISTS api;
 
-CREATE TABLE webapp.users (
+CREATE TABLE api.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NULL,

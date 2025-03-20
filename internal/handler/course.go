@@ -316,6 +316,7 @@ func (h *CourseHandler) HandleTraceUpload(w http.ResponseWriter, r *http.Request
 	bucketURL, err := h.uploadToGCS(file, uniqueName)
 	status := "uploaded"
 	if err != nil {
+		log.Printf("GCS upload failed: %v", err)
 		status = "failed"
 		bucketURL = "" // Since bucket_url is NOT NULL, use empty string
 		err = model.InsertTrace(h.db, user.ID, instructorID, status, courseID, vectorID, fileName, bucketURL)

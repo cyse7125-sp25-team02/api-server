@@ -1,5 +1,5 @@
 -- migrations/004_create_course_table.sql
-CREATE TABLE webapp.courses (
+CREATE TABLE api.courses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL,
     semester_term VARCHAR(10) NOT NULL CHECK (semester_term IN ('Fall', 'Spring', 'Summer')),
@@ -9,6 +9,6 @@ CREATE TABLE webapp.courses (
     semester_year INTEGER NOT NULL CHECK (semester_year >= 2000), -- Reasonable year validation
     date_created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     date_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    user_id UUID REFERENCES webapp.users(id),
-    instructor_id UUID REFERENCES webapp.instructors(id)
+    user_id UUID REFERENCES api.users(id),
+    instructor_id UUID REFERENCES api.instructors(id)
 );

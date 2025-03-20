@@ -104,7 +104,7 @@ func (r *UpdateCourseRequest) Validate() error {
 func CreateCourse(db *sql.DB, req CreateCourseRequest, userID uuid.UUID) (*Course, error) {
 	var course Course
 	query := `
-		INSERT INTO webapp.courses (name, semester_term, credit_hours, subject_code, course_id, semester_year, user_id, instructor_id)
+		INSERT INTO api.courses (name, semester_term, credit_hours, subject_code, course_id, semester_year, user_id, instructor_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, name, semester_term, credit_hours, subject_code, course_id, semester_year, date_created, date_updated, user_id, instructor_id
 	`
@@ -142,7 +142,7 @@ func GetCourseByID(db *sql.DB, courseID uuid.UUID) (*Course, error) {
 	query := `
         SELECT id, name, semester_term, credit_hours, subject_code, course_id, 
 		semester_year, date_created, date_updated, user_id, instructor_id
-        FROM webapp.courses
+        FROM api.courses
         WHERE id = $1
     `
 	err := db.QueryRow(query, courseID).Scan(
@@ -216,7 +216,7 @@ func UpdateCourse(db *sql.DB, courseID uuid.UUID, req UpdateCourseRequest, userI
 	setClauses = append(setClauses, "date_updated = CURRENT_TIMESTAMP")
 
 	// Construct the SQL query
-	query := "UPDATE webapp.courses SET " + strings.Join(setClauses, ", ") +
+	query := "UPDATE api.courses SET " + strings.Join(setClauses, ", ") +
 		fmt.Sprintf(" WHERE id = $%d RETURNING id, name, semester_term, credit_hours, subject_code, course_id, semester_year, date_created, date_updated, user_id, instructor_id", argIndex)
 	args = append(args, courseID)
 
@@ -245,7 +245,7 @@ func UpdateCourse(db *sql.DB, courseID uuid.UUID, req UpdateCourseRequest, userI
 }
 
 func DeleteCourseByID(db *sql.DB, courseID uuid.UUID) error {
-	query := "DELETE FROM webapp.courses WHERE id = $1"
+	query := "DELETE FROM api.courses WHERE id = $1"
 	result, err := db.Exec(query, courseID)
 	if err != nil {
 		return err
@@ -265,7 +265,7 @@ func DeleteCourseByID(db *sql.DB, courseID uuid.UUID) error {
 
 func InsertTrace(db *sql.DB, userID, instructorID uuid.UUID, status string, courseID uuid.UUID, vectorID *string, fileName, bucketURL string) error {
 	query := `
-        INSERT INTO webapp.traces (user_id, instructor_id, status, course_id, vector_id, file_name, bucket_url)
+        INSERT INTO api.traces (user_id, instructor_id, status, course_id, vector_id, file_name, bucket_url)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
     `
 	_, err := db.Exec(query, userID, instructorID, status, courseID, vectorID, fileName, bucketURL)
@@ -278,7 +278,7 @@ func InsertTrace(db *sql.DB, userID, instructorID uuid.UUID, status string, cour
 func GetTracesByCourseID(db *sql.DB, courseID uuid.UUID) ([]Trace, error) {
 	query := `
         SELECT id, user_id, instructor_id, course_id, status, vector_id, file_name, bucket_url, date_created, date_updated
-        FROM webapp.traces
+        FROM api.traces
         WHERE course_id = $1
         ORDER BY date_created DESC
     `
@@ -328,7 +328,7 @@ func GetTracesByCourseID(db *sql.DB, courseID uuid.UUID) ([]Trace, error) {
 func GetTraceByID(db *sql.DB, courseID, traceID uuid.UUID) (*Trace, error) {
 	query := `
 		SELECT id, user_id, instructor_id, status, vector_id, file_name, bucket_url, date_created, date_updated
-		FROM webapp.traces
+		FROM api.traces
 		WHERE course_id = $1 AND id = $2
 	`
 
@@ -364,7 +364,7 @@ func GetTraceByID(db *sql.DB, courseID, traceID uuid.UUID) (*Trace, error) {
 
 func DeleteTraceByID(db *sql.DB, courseID, traceID uuid.UUID) error {
 	query := `
-		DELETE FROM webapp.traces
+		DELETE FROM api.traces
 		WHERE course_id = $1 AND id = $2
 	`
 
