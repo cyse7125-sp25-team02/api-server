@@ -3,65 +3,60 @@ pipeline {
 
     environment {
         DOCKERHUB_CREDENTIALS = credentials('docker-hub-credentials')
-        DOCKER_IMAGE = "karanthakkar09/api-server"
-    }
-
-    tools {
-        go 'go1.24'
+        DOCKER_IMAGE_NAME = "api-server"
+        DOCKERHUB_USERNAME = "karanthakkar09"
+        GITHUB_TOKEN = credentials('github-token')
     }
 
     stages {
-        stage('Prepare Workspace and Determine Next Version') {
+        stage('Semantic Git Release') {
             steps {
                 script {
-                    cleanWs()
-                    sh 'exit 1'
-                    sh 'git config --global user.email "jenkins@jkops.com"'
-                    sh 'git config --global user.name "Jenkins"'
+                    sh 'npm install'
 
-                    git branch: 'master', url: 'https://github.com/cyse7125-sp25-team02/api-server', credentialsId: 'github-credentials'
+                    def output = sh(script: "npx semantic-release", returnStdout: true).trim()
+                    echo "semantic-release output:\n${output}"
 
-                    def goPath = sh(script: 'which go', returnStdout: true).trim()
-                    def goBinDir = goPath.substring(0, goPath.lastIndexOf('/'))
-                    env.PATH = "${goBinDir}:${env.PATH}"
+                    def versionLine = output.split('\n').find { it.toLowerCase().contains("the next release version is") }
                     
-                    sh 'go version'
-                    env.NEXT_VERSION = nextVersion(nonAnnotatedTag: true)
-                    echo "Next version determined by plugin: ${env.NEXT_VERSION}"
-                }
-            }
-        }
-
-        stage('Push New Tag Version') {
-            steps {
-                script {
-                    sh "git tag -a ${env.NEXT_VERSION} -m 'Release version ${env.NEXT_VERSION}'"
-                    withCredentials([gitUsernamePassword(credentialsId: 'github-credentials', gitToolName: 'Default')]) {
-                        sh "git push origin ${env.NEXT_VERSION}"
+                    if (versionLine) {
+                        env.APP_VERSION = versionLine.split(' ').last()
+                        echo "New version set: ${env.APP_VERSION}"
+                    } else {
+                        echo "No new version detected. Using latest existing version."
+                        sh 'git fetch --tags'
+                        env.APP_VERSION = sh(script: 'git describe --tags --abbrev=0 || true',returnStdout: true).trim()
+                        
+                        if (!env.APP_VERSION) {
+                            error "No previous version found and no new version generated."
+                        }
+                        echo "Using existing version: ${env.APP_VERSION}"
                     }
                 }
             }
         }
 
-        stage('Setup BuildX') {
+        stage('Build Docker Builder Image') {
             steps {
-                sh '''
-                    docker buildx create --use
-                    docker buildx inspect --bootstrap
-                '''
+                script {
+                    sh """
+                        docker buildx create --name mybuilder --use
+                        docker buildx inspect --bootstrap
+                    """
+                }
             }
         }
 
-        stage('Login and Build') {
+        stage('Build and Push Docker Image') {
             steps {
-                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
-
                 script {
                     sh """
-                        docker buildx build --platform linux/amd64,linux/arm64 \
-                        -t ${DOCKER_IMAGE}:latest \
-                        -t ${DOCKER_IMAGE}:${env.NEXT_VERSION} \
-                        --push .
+                        echo \$DOCKERHUB_CREDENTIALS_PSW | docker login -u \$DOCKERHUB_CREDENTIALS_USR --password-stdin
+                        docker buildx build \\
+                            --platform linux/amd64,linux/arm64 \\
+                            -t ${DOCKERHUB_USERNAME}/${DOCKER_IMAGE_NAME}:${env.APP_VERSION} \\
+                            -t ${DOCKERHUB_USERNAME}/${DOCKER_IMAGE_NAME}:latest \\
+                            --push .
                     """
                 }
             }
@@ -70,12 +65,20 @@ pipeline {
 
     post {
         always {
-            sh 'docker logout'
-            sh 'docker builder prune -f'
-            cleanWs()
+            script {
+                sh """
+                    docker buildx rm mybuilder || true
+                    docker system prune -f
+                    docker logout
+                """
+                cleanWs()
+            }
         }
         success {
-            echo "Successfully built and published Docker image ${DOCKER_IMAGE}:${env.NEXT_VERSION}"
+            echo "Pipeline completed successfully! Docker image ${DOCKERHUB_USERNAME}/${DOCKER_IMAGE_NAME}:${env.APP_VERSION} pushed to Docker Hub."
+        }
+        failure {
+            echo "Pipeline failed. Check the logs for details."
         }
     }
 }
