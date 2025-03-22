@@ -37,7 +37,7 @@ func NewConfig() *Config {
 		DBPassword:         getEnv("DB_PASSWORD", "password"),
 		DBName:             getEnv("DB_NAME", "api"),
 		GCSBucketName:      getEnv("GCS_BUCKET_NAME", "bucket_name"),
-		GCSCredentialsFile: getEnv("GCS_CREDENTIALS_FILE", "credentials.json"),
+		GCSCredentialsFile: getEnv("GCS_CREDENTIALS_FILE", ""),
 	}
 }
 

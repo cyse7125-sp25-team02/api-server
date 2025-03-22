@@ -27,10 +27,20 @@ type CourseHandler struct {
 
 func NewCourseHandler(db *sql.DB, cfg *config.Config) *CourseHandler {
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, option.WithCredentialsFile(cfg.GCSCredentialsFile))
+	var client *storage.Client
+	var err error
+
+	log.Printf("GCSCredentialsFile: %q", cfg.GCSCredentialsFile)
+	if cfg.GCSCredentialsFile != "" {
+		client, err = storage.NewClient(ctx, option.WithCredentialsFile(cfg.GCSCredentialsFile))
+	} else {
+		log.Println("Using Application Default Credentials")
+		client, err = storage.NewClient(ctx)
+	}
 	if err != nil {
 		log.Fatalf("Failed to create GCS client: %v", err)
 	}
+
 	return &CourseHandler{
 		db:         db,
 		gcsClient:  client,
