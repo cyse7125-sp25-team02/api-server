@@ -1,0 +1,16 @@
+{
+  "name": "api-server",
+  "release": {
+    "branches": [
+      "master"
+    ],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/github"
+    ]
+  },
+  "devDependencies": {
+    "semantic-release": "^24.2.3"
+  }
+}
