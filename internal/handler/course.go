@@ -11,11 +11,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/option"
 
+	"github.com/IBM/sarama"
 	"github.com/google/uuid"
 )
 
@@ -23,9 +25,10 @@ type CourseHandler struct {
 	db         *sql.DB
 	gcsClient  *storage.Client
 	bucketName string
+	producer   sarama.SyncProducer
 }
 
-func NewCourseHandler(db *sql.DB, cfg *config.Config) *CourseHandler {
+func NewCourseHandler(db *sql.DB, cfg *config.Config, producer sarama.SyncProducer) *CourseHandler {
 	ctx := context.Background()
 	var client *storage.Client
 	var err error
@@ -45,6 +48,7 @@ func NewCourseHandler(db *sql.DB, cfg *config.Config) *CourseHandler {
 		db:         db,
 		gcsClient:  client,
 		bucketName: cfg.GCSBucketName,
+		producer:   producer,
 	}
 }
 
@@ -287,7 +291,7 @@ func (h *CourseHandler) HandleTraceUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// Get the PDF file
-	file, handler, err := r.FormFile("file")
+	file, _, err := r.FormFile("file")
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "File is required"})
@@ -295,41 +299,48 @@ func (h *CourseHandler) HandleTraceUpload(w http.ResponseWriter, r *http.Request
 	}
 	defer file.Close()
 
-	// Get form fields
-	fileName := r.FormValue("file_name")
-	if fileName == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "file_name is required"})
-		return
-	}
-
-	instructorIDStr := r.FormValue("instructor_id")
-	if instructorIDStr == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "instructor_id is required"})
-		return
-	}
-	instructorID, err := uuid.Parse(instructorIDStr)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid instructor_id format"})
-		return
-	}
-
 	var vectorID *string
 	if vid := r.FormValue("vector_id"); vid != "" {
 		vectorID = &vid
 	}
 
+	// Fetch course details
+	course, err := model.GetCourseByID(h.db, courseID)
+	if err != nil {
+		log.Printf("Failed to fetch course: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to fetch course details"})
+		return
+	}
+
+	// Fetch instructor details
+	instructor, err := model.GetInstructorByID(h.db, course.InstructorID)
+	if err != nil {
+		log.Printf("Failed to fetch instructor: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to fetch instructor details"})
+		return
+	}
+
+	// Generate custom filename
+	customName := fmt.Sprintf(
+		"%s_%s_%s_%d_%s_%d.pdf",
+		sanitizeFilename(course.Name),
+		sanitizeFilename(instructor.Name),
+		course.SubjectCode,
+		course.CourseID,
+		course.SemesterTerm,
+		course.SemesterYear,
+	)
+
 	// Generate a unique filename for GCS to avoid conflicts
-	uniqueName := fmt.Sprintf("%s-%s", uuid.New().String(), handler.Filename)
-	bucketURL, err := h.uploadToGCS(file, uniqueName)
+	bucketURL, err := h.uploadToGCS(file, customName)
 	status := "uploaded"
 	if err != nil {
 		log.Printf("GCS upload failed: %v", err)
 		status = "failed"
 		bucketURL = "" // Since bucket_url is NOT NULL, use empty string
-		err = model.InsertTrace(h.db, user.ID, instructorID, status, courseID, vectorID, fileName, bucketURL)
+		err = model.InsertTrace(h.db, user.ID, course.InstructorID, status, courseID, vectorID, customName, bucketURL)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to insert trace record"})
@@ -341,11 +352,37 @@ func (h *CourseHandler) HandleTraceUpload(w http.ResponseWriter, r *http.Request
 	}
 
 	// Insert trace record on successful upload
-	err = model.InsertTrace(h.db, user.ID, instructorID, status, courseID, vectorID, fileName, bucketURL)
+	err = model.InsertTrace(h.db, user.ID, course.InstructorID, status, courseID, vectorID, customName, bucketURL)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to insert trace record"})
 		return
+	}
+
+	// Produce JSON message to Kafka
+	traceMessage := map[string]string{
+		"instructor_name": instructor.Name,
+		"course_code":     fmt.Sprintf("%s %d", course.SubjectCode, course.CourseID),
+		"semester_term":   course.SemesterTerm,
+		"semester_year":   fmt.Sprintf("%d", course.SemesterYear),
+		"course_name":     course.Name,
+		"credit_hours":    fmt.Sprintf("%d", course.CreditHours),
+		"bucket_path":     bucketURL,
+	}
+	messageBytes, err := json.Marshal(traceMessage)
+	if err != nil {
+		log.Printf("Failed to marshal Kafka message: %v", err)
+	} else {
+		msg := &sarama.ProducerMessage{
+			Topic: "pdf-upload",
+			Value: sarama.ByteEncoder(messageBytes),
+		}
+		partition, offset, err := h.producer.SendMessage(msg)
+		if err != nil {
+			log.Printf("Failed to send Kafka message: %v", err)
+		} else {
+			log.Printf("Sent message to partition %d, offset %d", partition, offset)
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -505,4 +542,13 @@ func (h *CourseHandler) DeleteTraceByID(w http.ResponseWriter, r *http.Request) 
 	// Return success response
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Trace deleted successfully"})
+}
+
+// sanitizeFilename removes spaces and special characters, replacing with underscores or nothing.
+func sanitizeFilename(input string) string {
+	// Replace spaces and special characters with underscores, keep alphanumeric
+	reg, _ := regexp.Compile("[^a-zA-Z0-9]+")
+	cleaned := reg.ReplaceAllString(input, "_")
+	// Remove leading/trailing underscores
+	return strings.Trim(cleaned, "_")
 }

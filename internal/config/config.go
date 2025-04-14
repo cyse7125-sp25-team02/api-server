@@ -16,6 +16,7 @@ type Config struct {
 	DBName             string
 	GCSBucketName      string
 	GCSCredentialsFile string
+	KAFKA_BROKER       string
 }
 
 func NewConfig() *Config {
@@ -38,6 +39,7 @@ func NewConfig() *Config {
 		DBName:             getEnv("DB_NAME", "api"),
 		GCSBucketName:      getEnv("GCS_BUCKET_NAME", "bucket_name"),
 		GCSCredentialsFile: getEnv("GCS_CREDENTIALS_FILE", ""),
+		KAFKA_BROKER:       getEnv("KAFKA_BROKER", "localhost:9092"),
 	}
 }
 
