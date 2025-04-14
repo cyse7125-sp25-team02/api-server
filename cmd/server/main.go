@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/IBM/sarama"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -21,6 +22,16 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
+
+	brokers := []string{cfg.KAFKA_BROKER}
+
+	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Producer.Return.Successes = true
+	producer, err := sarama.NewSyncProducer(brokers, kafkaConfig)
+	if err != nil {
+		log.Fatalf("Failed to initialize Kafka producer: %v", err)
+	}
+	defer producer.Close()
 
 	// Create a new ServeMux
 	mux := http.NewServeMux()
@@ -69,7 +80,7 @@ func main() {
 	instructorHandler := handler.NewInstructorHandler(db)
 	mux.Handle("/v1/instructor", countRequests("/v1/instructor", instructorHandler))
 
-	courseHandler := handler.NewCourseHandler(db, cfg)
+	courseHandler := handler.NewCourseHandler(db, cfg, producer)
 	mux.Handle("POST /v1/course", countRequests("/v1/course", http.HandlerFunc(courseHandler.CreateCourse)))
 	mux.Handle("GET /v1/course/{course_id}", countRequests("/v1/course/{course_id}", http.HandlerFunc(courseHandler.GetCourseByID)))
 	mux.Handle("PATCH /v1/course/{course_id}", countRequests("/v1/course/{course_id}", http.HandlerFunc(courseHandler.PatchCourse)))

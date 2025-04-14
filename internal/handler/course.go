@@ -16,6 +16,7 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/option"
 
+	"github.com/IBM/sarama"
 	"github.com/google/uuid"
 )
 
@@ -23,9 +24,10 @@ type CourseHandler struct {
 	db         *sql.DB
 	gcsClient  *storage.Client
 	bucketName string
+	producer   sarama.SyncProducer
 }
 
-func NewCourseHandler(db *sql.DB, cfg *config.Config) *CourseHandler {
+func NewCourseHandler(db *sql.DB, cfg *config.Config, producer sarama.SyncProducer) *CourseHandler {
 	ctx := context.Background()
 	var client *storage.Client
 	var err error
@@ -45,6 +47,7 @@ func NewCourseHandler(db *sql.DB, cfg *config.Config) *CourseHandler {
 		db:         db,
 		gcsClient:  client,
 		bucketName: cfg.GCSBucketName,
+		producer:   producer,
 	}
 }
 
@@ -346,6 +349,28 @@ func (h *CourseHandler) HandleTraceUpload(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to insert trace record"})
 		return
+	}
+
+	// Produce JSON message to Kafka
+	traceMessage := map[string]string{
+		"instructor_id": instructorID.String(),
+		"course_id":     courseID.String(),
+		"bucket_url":    bucketURL,
+	}
+	messageBytes, err := json.Marshal(traceMessage)
+	if err != nil {
+		log.Printf("Failed to marshal Kafka message: %v", err)
+	} else {
+		msg := &sarama.ProducerMessage{
+			Topic: "pdf-upload",
+			Value: sarama.ByteEncoder(messageBytes),
+		}
+		partition, offset, err := h.producer.SendMessage(msg)
+		if err != nil {
+			log.Printf("Failed to send Kafka message: %v", err)
+		} else {
+			log.Printf("Sent message to partition %d, offset %d", partition, offset)
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
