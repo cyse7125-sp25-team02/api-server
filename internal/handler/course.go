@@ -361,12 +361,12 @@ func (h *CourseHandler) HandleTraceUpload(w http.ResponseWriter, r *http.Request
 
 	// Produce JSON message to Kafka
 	traceMessage := map[string]string{
-		"instructor_name": instructor.Name,
-		"course_code":     fmt.Sprintf("%s %d", course.SubjectCode, course.CourseID),
-		"semester_term":   course.SemesterTerm,
-		"semester_year":   fmt.Sprintf("%d", course.SemesterYear),
-		"course_name":     course.Name,
-		"credit_hours":    fmt.Sprintf("%d", course.CreditHours),
+		"instructor_name": strings.ToLower(instructor.Name),
+		"course_code":     strings.ToLower(fmt.Sprintf("%s %d", course.SubjectCode, course.CourseID)),
+		"semester_term":   strings.ToLower(course.SemesterTerm),
+		"semester_year":   strings.ToLower(fmt.Sprintf("%d", course.SemesterYear)),
+		"course_name":     strings.ToLower(course.Name),
+		"credit_hours":    strings.ToLower(fmt.Sprintf("%d", course.CreditHours)),
 		"bucket_path":     bucketURL,
 	}
 	messageBytes, err := json.Marshal(traceMessage)
